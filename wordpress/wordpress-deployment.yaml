@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wordpress-deployment
+  namespace: wordpress
+  labels:
+    app: wordpress-deployment
+spec:
+  minReadySeconds: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 40%
+      maxUnavailable: 40%
+  selector:
+    matchLabels:
+      app: wordpress-pod
+  template:
+    metadata:
+      labels:
+        app: wordpress-pod
+    spec:
+      initContainers:
+        - name: check-db-ready
+          image: imega/mysql-client
+          command:
+            - 'sh'
+            - '-c'
+            - 'until mysqladmin ping -h mysql-service &> /dev/null; do echo waiting; sleep 2; done'
+      containers:
+        - name: wordpress
+          image: wordpress
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+              name: wp-pod-port
+          env:
+            - name: WORDPRESS_DB_HOST
+              value: mysql-service:3306
+            - name: WORDPRESS_DB_USER
+              value: wordpress
+            - name: WORDPRESS_DB_PASSWORD
+              value: wordpress
+            - name: WORDPRESS_DB_NAME
+              value: wordpress
+          resources:
+            limits:
+              cpu: 200m
+              memory: 200Mi
+            requests:
+              cpu: 100m
+              memory: 200Mi
+          startupProbe:
+            tcpSocket:
+              port: wp-pod-port
+            initialDelaySeconds: 5
+            failureThreshold: 60
+            timeoutSeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: wp-pod-port
+            failureThreshold: 3
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            tcpSocket:
+              port: wp-pod-port
+            periodSeconds: 3
+            timeoutSeconds: 3
+        - name: wordpress-exporter
+          image: erwin82/wordpress_exporter:latest
+          ports:
+            - containerPort: 8888
+              name: wp-exporter
+          env:
+            - name: WORDPRESS_DB_HOST
+              value: "3306"
+            - name: WORDPRESS_DB_USER
+              value: "wordpress"
+            - name: WORDPRESS_DB_PASSWORD
+              value: "wordpress1234"
+            - name: WORDPRESS_DB_NAME
+              value: "db"
+              
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wordpress-service
+  namespace: wordpress
+  labels:
+    app: wp-service
+spec:
+  type: ClusterIP
+  selector:
+    app: wordpress-pod
+  ports:
+    - port: 80
+      targetPort: wp-pod-port
+      name: wordpress-service-port
+      protocol: TCP
+    - port: 8888
+      targetPort: wp-exporter
+      name: wp-exporter
+  externalIPs:
+    - 192.168.3.50

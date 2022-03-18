@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: mysql-deployment
+    namespace: wordpress
+    labels:
+        app: mysql-deployment
+spec:
+    selector:
+        matchLabels:
+            app: mysql-pod
+    template:
+        metadata:
+            labels:
+                app: mysql-pod
+        spec:
+            containers:
+                - name: mysql
+                  image: mysql:8.0
+                  imagePullPolicy: IfNotPresent
+                  args:
+                      - --default_authentication_plugin=mysql_native_password
+                      - --character-set-server=utf8mb4
+                      - --collation-server=utf8mb4_unicode_ci
+                  ports:
+                      - containerPort: 3306
+                        name: mysql-pod-port
+                  env:
+                      - name: MYSQL_ROOT_PASSWORD
+                        value: mysql_root_password
+                      - name: MYSQL_DATABASE
+                        value: wordpress
+                      - name: MYSQL_PASSWORD
+                        value: wordpress
+                      - name: MYSQL_USER
+                        value: wordpress
+                  volumeMounts:
+                      - mountPath: /var/lib/mysql
+                        name: mysql-db
+                - name: mysql-exporter
+                  image: prom/mysqld-exporter:latest
+                  env:
+                      - name: DATA_SOURCE_NAME
+                        value: "root:mysql_root_password@(mysql-service.wordpress.svc.cluster.local:3306)/"
+                  resources:
+                    requests:
+                      cpu: 100m
+                      memory: 100Mi
+                  ports:
+                  - name: mysql-exporter
+                    containerPort: 9104
+            volumes:
+                - name: mysql-db
+                  hostPath:
+                      path: /var/lib/mysql
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-service
+  namespace: wordpress
+  labels:
+    app: mysql-service
+spec:
+  selector:
+    app: mysql-pod
+  ports:
+    - port: 3306
+      name: mysql-service-port
+      protocol: TCP
+      targetPort: mysql-pod-port
+    - port: 9104
+      name: mysql-exporter
+      protocol: TCP
+      targetPort: mysql-exporter

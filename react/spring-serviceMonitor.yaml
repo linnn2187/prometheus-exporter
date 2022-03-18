@@ -1,0 +1,12 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: spring-exporter
+  namespace: react
+spec:
+  endpoints:
+  - interval: 15s
+    port: spring-exporter
+  selector:
+    matchLabels:
+      app: polling-app-server
